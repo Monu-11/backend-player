@@ -1,0 +1,23 @@
+{
+  "name": "custom-youtube",
+  "version": "1.0.0",
+  "description": "backend of youtube with planning of add many more feature",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Monu-11/backend-player.git"
+  },
+  "keywords": [
+    "backend",
+    "youtube"
+  ],
+  "author": "Mod Narayan Singh",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Monu-11/backend-player/issues"
+  },
+  "homepage": "https://github.com/Monu-11/backend-player#readme"
+}
