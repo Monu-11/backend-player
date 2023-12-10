@@ -1,6 +1,7 @@
 import mongoose, { Schema } from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import validator from "validator";
 
 const userSchema = new Schema(
   {
@@ -16,6 +17,7 @@ const userSchema = new Schema(
       type: String,
       required: [true, "Please enter your email"],
       unique: [true, "Email is Already used"],
+      validate: [validator.isEmail, "Please enter valid email"],
       lowercase: true,
       trim: true,
     },
@@ -53,7 +55,7 @@ const userSchema = new Schema(
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  this.password = bcrypt.hash(this.password, 10);
+  this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
