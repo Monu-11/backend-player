@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
 const generateAccessAndRefereshTokens = async (userId) => {
   try {
@@ -183,41 +184,89 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User Successfully L0gged Out"));
 });
 
-const deleteUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+// const deleteUser = asyncHandler(async (req, res) => {
+//   const { email, password } = req.body;
 
-  if (!email || !password) {
-    throw new ApiError(401, "Invalid email or password");
+//   if (!email || !password) {
+//     throw new ApiError(401, "Invalid email or password");
+//   }
+
+//   const user = await User.findOne({ email });
+
+//   if (!user) {
+//     throw new ApiError(401, "User not found");
+//   }
+
+//   if (user.email !== req.user.email) {
+//     throw new ApiError(409, "You are not authorized to delete the account");
+//   }
+
+//   const isValidPassword = user.isPasswordCorrect(password);
+
+//   if (!isValidPassword) {
+//     throw new ApiError(401, "Invalid email or password");
+//   }
+
+//   await User.findByIdAndDelete(user._id);
+
+//   const options = {
+//     httpOnly: true,
+//     secure: true,
+//   };
+
+//   return res
+//     .status(200)
+//     .clearCookie("accessToken", options)
+//     .clearCookie("refreshToken", options)
+//     .json(new ApiResponse(200, {}, "User Deleted Successfully"));
+// });
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  const incomingRefreshToken =
+    req.cookies.refreshToken || req.body.refreshToken;
+
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorized request");
   }
 
-  const user = await User.findOne({ email });
+  try {
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
 
-  if (!user) {
-    throw new ApiError(401, "User not found");
+    const user = await User.findById(decodedToken._id);
+
+    if (!user) {
+      throw new ApiError(401, "Invalid refresh token");
+    }
+
+    if (incomingRefreshToken !== user.refreshToken) {
+      throw new ApiError(401, "Refresh token expired or used");
+    }
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+
+    const { accessToken, newRefreshToken } =
+      await generateAccessAndRefereshTokens(user._id);
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", newRefreshToken, options)
+      .json(
+        new ApiResponse(
+          200,
+          { accessToken, refreshToken: newRefreshToken },
+          "Access token refreshed"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, "Invalid refresh token");
   }
-
-  if (user.email !== req.user.email) {
-    throw new ApiError(409, "You are not authorized to delete the account");
-  }
-
-  const isValidPassword = user.isPasswordCorrect(password);
-
-  if (!isValidPassword) {
-    throw new ApiError(401, "Invalid email or password");
-  }
-
-  await User.findByIdAndDelete(user._id);
-
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
-
-  return res
-    .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
-    .json(new ApiResponse(200, {}, "User Deleted Successfully"));
 });
 
-export { registerUser, loginUser, logoutUser, deleteUser };
+export { registerUser, loginUser, logoutUser, refreshAccessToken };
