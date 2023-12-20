@@ -1,7 +1,10 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import { trusted } from "mongoose";
@@ -79,8 +82,16 @@ const registerUser = asyncHandler(async (req, res) => {
 
   const user = await User.create({
     fullName,
-    avatar: avatar.url,
-    coverImage: coverImage?.url || "",
+    avatar: {
+      public_id: avatar.public_id,
+      url: avatar.url,
+    },
+    coverImage: coverImage
+      ? {
+          public_id: coverImage.public_id,
+          url: coverImage.url,
+        }
+      : { public_id: "", url: "" },
     email,
     password,
     username: username.toLowerCase(),
@@ -185,43 +196,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User Successfully L0gged Out"));
 });
 
-// const deleteUser = asyncHandler(async (req, res) => {
-//   const { email, password } = req.body;
-
-//   if (!email || !password) {
-//     throw new ApiError(401, "Invalid email or password");
-//   }
-
-//   const user = await User.findOne({ email });
-
-//   if (!user) {
-//     throw new ApiError(401, "User not found");
-//   }
-
-//   if (user.email !== req.user.email) {
-//     throw new ApiError(409, "You are not authorized to delete the account");
-//   }
-
-//   const isValidPassword = user.isPasswordCorrect(password);
-
-//   if (!isValidPassword) {
-//     throw new ApiError(401, "Invalid email or password");
-//   }
-
-//   await User.findByIdAndDelete(user._id);
-
-//   const options = {
-//     httpOnly: true,
-//     secure: true,
-//   };
-
-//   return res
-//     .status(200)
-//     .clearCookie("accessToken", options)
-//     .clearCookie("refreshToken", options)
-//     .json(new ApiResponse(200, {}, "User Deleted Successfully"));
-// });
-
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const incomingRefreshToken =
     req.cookies.refreshToken || req.body.refreshToken;
@@ -295,9 +269,8 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  return res
-    .status(200)
-    .json(200, req.user, "Current user fetched successfully");
+  const user = await User.findById(req.user._id);
+  return res.status(200).json(200, user, "Current user fetched successfully");
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
@@ -316,7 +289,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
       },
     },
     { new: true }
-  ).select("-password");
+  ).select("-password -refreshToken");
 
   return res
     .status(200)
@@ -336,15 +309,24 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading on avatar");
   }
 
+  const AvatarUser = await User.findById(req.user?._id);
+
+  if (!AvatarUser) {
+    throw new ApiError(401, "User not found");
+  }
+
+  await deleteFromCloudinary(AvatarUser.avatar.public_id);
+
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
-        avatar: avatar.url,
+        "avatar.public_id": avatar.public_id,
+        "avatar.url": avatar.url,
       },
     },
     { new: true }
-  ).select("-password");
+  ).select("-password -refreshToken");
 
   return res
     .status(200)
@@ -364,21 +346,88 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Error while uploading on cover Image");
   }
 
+  const CoverUser = await User.findById(req.user?._id);
+
+  if (!CoverUser) {
+    throw new ApiError(401, "User not found");
+  }
+
+  await deleteFromCloudinary(CoverUser.coverImage.public_id);
+
   const user = await User.findByIdAndUpdate(
     req.user?.id,
     {
       $set: {
-        coverImage: coverImage.url,
+        "coverImage.public_id": coverImage.public_id,
+        "coverImage.url": coverImage.url,
       },
     },
     { new: true }
-  ).select("-password");
+  ).select("-password -refreshToken");
 
   return res
     .status(200)
     .json(new ApiResponse(200, user, "Cover Image updated successfully"));
 });
 
+const deleteUser = asyncHandler(async (req, res) => {
+  const { username, email, password } = req.body;
+
+  if (
+    [username, email, password].some((field) => !field || field.trim() === "")
+  ) {
+    throw new ApiError(400, "All fields required");
+  }
+
+  const user = await User.findById(req.user?._id);
+
+  if (user.email !== email || user.username !== username) {
+    throw new ApiError(401, "Invalid username or email");
+  }
+
+  const isValidPassword = await user.isPasswordCorrect(password);
+
+  if (!isValidPassword) {
+    throw new ApiError(401, "Invalid username or password");
+  }
+
+  const { avatar, coverImage } = user;
+
+  if (avatar && avatar.public_id) {
+    const deleteAvatar = await deleteFromCloudinary(avatar.public_id);
+
+    if (deleteAvatar.result !== "ok") {
+      throw new ApiError(500, "Failed to delete Avatar");
+    }
+  }
+
+  if (coverImage && coverImage.public_id) {
+    const deleteCoverImage = await deleteFromCloudinary(coverImage.public_id);
+
+    if (deleteCoverImage.result !== "ok") {
+      throw new ApiError(500, "Failed to delete Cover Image");
+    }
+  }
+
+  await User.findByIdAndDelete(user._id);
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(
+      new ApiResponse(
+        200,
+        {},
+        "User and associated images deleted successfully"
+      )
+    );
+});
 export {
   registerUser,
   loginUser,
@@ -389,4 +438,5 @@ export {
   updateAccountDetails,
   updateUserAvatar,
   updateUserCoverImage,
+  deleteUser,
 };

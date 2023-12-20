@@ -25,4 +25,17 @@ const uploadOnCloudinary = async (localFilePath) => {
   }
 };
 
-export { uploadOnCloudinary };
+const deleteFromCloudinary = async (public_id) => {
+  try {
+    if (!public_id) return null;
+
+    const response = await cloudinary.uploader.destroy(public_id);
+
+    return response;
+  } catch (error) {
+    console.log("Error while delete the Avatar or CoverImage");
+    return null;
+  }
+};
+
+export { uploadOnCloudinary, deleteFromCloudinary };
