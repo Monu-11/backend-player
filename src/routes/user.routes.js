@@ -38,7 +38,11 @@ router.route("/delete").post(verifyJWT, deleteUser);
 router.route("/change-password").post(verifyJWT, changeCurrentPassword);
 router.route("/get-user").get(verifyJWT, getCurrentUser);
 router.route("/update-account").post(verifyJWT, updateAccountDetails);
-router.route("/update-avatar").post(verifyJWT, updateUserAvatar);
-router.route("/update-coverImage").post(verifyJWT, updateUserCoverImage);
+router
+  .route("/update-avatar")
+  .post(upload.single("avatar"), verifyJWT, updateUserAvatar);
+router
+  .route("/update-coverImage")
+  .post(upload.single("coverImage"), verifyJWT, updateUserCoverImage);
 
 export default router;

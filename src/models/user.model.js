@@ -40,11 +40,9 @@ const userSchema = new Schema(
     coverImage: {
       public_id: {
         type: String,
-        required: true,
       },
       url: {
         type: String,
-        required: true,
       },
     },
     watchHistroy: [

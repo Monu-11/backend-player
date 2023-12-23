@@ -7,7 +7,7 @@ import {
 } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
-import { trusted } from "mongoose";
+import validator from "validator";
 
 const generateAccessAndRefereshTokens = async (userId) => {
   try {
@@ -49,6 +49,10 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All fields are required");
   }
 
+  if (email && !validator.isEmail(email)) {
+    throw new ApiError(401, "Invalid email format");
+  }
+
   const existedUser = await User.findOne({
     $or: [{ username }, { email }],
   });
@@ -87,10 +91,7 @@ const registerUser = asyncHandler(async (req, res) => {
       url: avatar.url,
     },
     coverImage: coverImage
-      ? {
-          public_id: coverImage.public_id,
-          url: coverImage.url,
-        }
+      ? { public_id: coverImage.public_id || "", url: coverImage.url || "" }
       : { public_id: "", url: "" },
     email,
     password,
@@ -269,15 +270,21 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
-  return res.status(200).json(200, user, "Current user fetched successfully");
+  const user = await User.findById(req.user._id).select("-password");
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Current user fetched successfully"));
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email } = req.body;
 
-  if (!fullName || !email) {
+  if (!(fullName || email)) {
     throw new ApiError(400, "All fields are required");
+  }
+
+  if (email && !validator.isEmail(email)) {
+    throw new ApiError(401, "Invalid email format");
   }
 
   const user = await User.findByIdAndUpdate(
